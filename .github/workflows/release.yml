@@ -1,0 +1,58 @@
+name: Build and Release VLCKit SPM
+
+on:
+  push:
+    tags:
+      - '[0-9]+.*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Building VLCKit SPM for version: $VERSION"
+
+      - name: Generate xcframework
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          chmod +x generate.sh
+          ./generate.sh "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: VLCKit ${{ steps.version.outputs.version }}
+          body: |
+            Automated release of VLCKit SPM package for version **${{ steps.version.outputs.version }}**.
+
+            Source: [VideoLAN CocoaPods](https://download.videolan.org/pub/cocoapods/prod/)
+
+            ### Usage
+            Add to your `Package.swift`:
+            ```swift
+            .package(url: "https://github.com/${{ github.repository }}/", .upToNextMajor(from: "${{ steps.version.outputs.version }}"))
+            ```
+          files: .tmp/VLCKit-all.xcframework.zip
+          draft: false
+          prerelease: false
+
+      - name: Commit updated Package.swift
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Package.swift LICENSE
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update Package.swift for version ${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
