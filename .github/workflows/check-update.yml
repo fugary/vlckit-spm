@@ -1,0 +1,79 @@
+name: Check for New VLCKit Versions
+
+on:
+  schedule:
+    # Run daily at 08:00 UTC
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check for new stable versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Fetching VLCKit upstream tags..."
+          UPSTREAM_TAGS=$(curl -sfL "https://api.github.com/repos/videolan/vlckit/tags?per_page=100" \
+            | grep '"name"' \
+            | sed 's/.*"name": "//;s/".*//' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V)
+
+          echo "📋 Upstream stable versions:"
+          echo "$UPSTREAM_TAGS"
+
+          echo ""
+          echo "🏷️  Our existing tags:"
+          OUR_TAGS=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
+          echo "$OUR_TAGS"
+
+          echo ""
+          BASE_URL="https://download.videolan.org/pub/cocoapods/prod/"
+          DIR_LISTING=$(curl -sfL "$BASE_URL")
+
+          NEW_VERSIONS=""
+          for VERSION in $UPSTREAM_TAGS; do
+            if echo "$OUR_TAGS" | grep -qx "$VERSION"; then
+              continue
+            fi
+
+            # Verify binaries exist on VideoLAN download page
+            IOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "MobileVLCKit-${VERSION}-" || true)
+            MACOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "\"VLCKit-${VERSION}-" || true)
+            TVOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "TVVLCKit-${VERSION}-" || true)
+
+            if [ "$IOS_EXISTS" -gt 0 ] && [ "$MACOS_EXISTS" -gt 0 ] && [ "$TVOS_EXISTS" -gt 0 ]; then
+              echo "✅ New version found with binaries: ${VERSION}"
+              NEW_VERSIONS="${NEW_VERSIONS} ${VERSION}"
+            else
+              echo "⏭️  Version ${VERSION} exists but binaries not yet available (iOS=${IOS_EXISTS} macOS=${MACOS_EXISTS} tvOS=${TVOS_EXISTS})"
+            fi
+          done
+
+          if [ -z "$NEW_VERSIONS" ]; then
+            echo ""
+            echo "😴 No new versions to release."
+            exit 0
+          fi
+
+          echo ""
+          echo "🚀 Creating tags for new versions:${NEW_VERSIONS}"
+          for VERSION in $NEW_VERSIONS; do
+            echo "🏷️  Tagging ${VERSION}..."
+            git tag "$VERSION"
+            git push origin "$VERSION"
+            echo "   ✅ Tag ${VERSION} pushed — release workflow will be triggered."
+            # Small delay to avoid race conditions between workflow triggers
+            sleep 5
+          done
