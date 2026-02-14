@@ -112,9 +112,9 @@ else
     exit 1
 fi
 
-PACKAGE_STRING="Target.binaryTarget(name: \"VLCKit-all\", url: \"https:\/\/github.com\/${GITHUB_REPO}\/releases\/download\/${TAG_VERSION}\/VLCKit-all.xcframework.zip\", checksum: \"${PACKAGE_HASH}\")"
+PACKAGE_STRING="Target.binaryTarget(name: \"VLCKit-all\", url: \"https://github.com/${GITHUB_REPO}/releases/download/${TAG_VERSION}/VLCKit-all.xcframework.zip\", checksum: \"${PACKAGE_HASH}\")"
 echo "📝 Updating Package.swift (hash: ${PACKAGE_HASH})"
-sed -i '' -e "s/let vlcBinary.*/let vlcBinary = ${PACKAGE_STRING}/" Package.swift
+sed -i '' -e "s|let vlcBinary.*|let vlcBinary = ${PACKAGE_STRING}|" Package.swift
 
 # --- Copy license ---
 cp -f .tmp/MobileVLCKit-binary/COPYING.txt ./LICENSE
