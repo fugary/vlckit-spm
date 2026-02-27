@@ -50,7 +50,8 @@ jobs:
 
             # Verify binaries exist on VideoLAN download page
             IOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "MobileVLCKit-${VERSION}-" || true)
-            MACOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "\"VLCKit-${VERSION}-" || true)
+            # Find VLCKit but exclude MobileVLCKit and TVVLCKit
+            MACOS_EXISTS=$(echo "$DIR_LISTING" | grep "VLCKit-${VERSION}-" | grep -v "MobileVLCKit" | grep -v "TVVLCKit" | wc -l | tr -d ' ' || true)
             TVOS_EXISTS=$(echo "$DIR_LISTING" | grep -c "TVVLCKit-${VERSION}-" || true)
 
             if [ "$IOS_EXISTS" -gt 0 ] && [ "$MACOS_EXISTS" -gt 0 ] && [ "$TVOS_EXISTS" -gt 0 ]; then
@@ -69,11 +70,24 @@ jobs:
 
           echo ""
           echo "🚀 Creating tags for new versions:${NEW_VERSIONS}"
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Setup auth using PAT if available, fallback to GITHUB_TOKEN
+          AUTH_TOKEN="${{ secrets.PAT_TOKEN }}"
+          if [ -z "$AUTH_TOKEN" ]; then
+            echo "⚠️ PAT_TOKEN not found! Falling back to GITHUB_TOKEN. Tag pushes won't trigger the release workflow."
+            AUTH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          fi
+          
+          git remote set-url origin "https://x-access-token:${AUTH_TOKEN}@github.com/${{ github.repository }}.git"
+
           for VERSION in $NEW_VERSIONS; do
             echo "🏷️  Tagging ${VERSION}..."
             git tag "$VERSION"
             git push origin "$VERSION"
-            echo "   ✅ Tag ${VERSION} pushed — release workflow will be triggered."
+            echo "   ✅ Tag ${VERSION} pushed."
             # Small delay to avoid race conditions between workflow triggers
             sleep 5
           done
