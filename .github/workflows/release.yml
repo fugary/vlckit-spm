@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - '[0-9]+.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'VLCKit version to build (e.g. 3.7.3)'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -15,10 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract version from tag
+      - name: Extract version
         id: version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          # Use input version for workflow_dispatch, tag name for tag push
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📌 Building VLCKit SPM for version: $VERSION"
 
@@ -38,16 +49,17 @@ jobs:
           git commit -m "chore: update Package.swift for version ${{ steps.version.outputs.version }}"
           git push origin HEAD:main
 
-      - name: Move tag to updated commit
+      - name: Create or move tag
         run: |
-          # Re-tag on the commit that has the updated Package.swift
-          git tag -f "${{ github.ref_name }}"
-          git push origin "${{ github.ref_name }}" --force
+          VERSION="${{ steps.version.outputs.version }}"
+          # Create or move tag to the commit with the updated Package.swift
+          git tag -f "$VERSION"
+          git push origin "$VERSION" --force
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.version }}
           name: VLCKit ${{ steps.version.outputs.version }}
           body: |
             Automated release of VLCKit SPM package for version **${{ steps.version.outputs.version }}**.

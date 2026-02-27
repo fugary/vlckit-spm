@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - name: Checkout
@@ -18,7 +19,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          token: ${{ secrets.PAT_TOKEN != '' && secrets.PAT_TOKEN || github.token }}
 
       - name: Check for new stable versions
         env:
@@ -70,22 +70,11 @@ jobs:
           fi
 
           echo ""
-          echo "🚀 Creating tags for new versions:${NEW_VERSIONS}"
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if [ -n "${{ secrets.PAT_TOKEN }}" ]; then
-            echo "🔑 PAT_TOKEN detected, using it for tag pushes (will trigger release workflow)"
-          else
-            echo "⚠️ PAT_TOKEN not found! Using default GITHUB_TOKEN (will NOT trigger release workflow)"
-          fi
-
+          echo "🚀 Triggering release workflow for new versions:${NEW_VERSIONS}"
           for VERSION in $NEW_VERSIONS; do
-            echo "🏷️  Tagging ${VERSION}..."
-            git tag "$VERSION"
-            git push origin "$VERSION"
-            echo "   ✅ Tag ${VERSION} pushed."
-            # Small delay to avoid race conditions between workflow triggers
+            echo "📦 Dispatching release for ${VERSION}..."
+            gh workflow run release.yml -f version="${VERSION}"
+            echo "   ✅ Release workflow triggered for ${VERSION}."
+            # Small delay to avoid rate limits
             sleep 5
           done
